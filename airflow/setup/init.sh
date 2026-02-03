@@ -36,4 +36,3 @@ airflow connections -a \
 airflow connections -a \
   --conn_id=system_slack \
   --conn_type=google_cloud_platform
-

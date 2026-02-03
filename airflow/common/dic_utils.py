@@ -19,10 +19,10 @@ def get_value_by_path(data, path):
     :return: if path is valid returns the corresponding value, otherwise None
     """
 
-    if not isinstance(data, dict) or path == '':
+    if not isinstance(data, dict) or path == "":
         return None
 
-    value_keys = path.split('.')
+    value_keys = path.split(".")
     result = data
 
     for key in value_keys:
@@ -45,12 +45,12 @@ def resolve_placeholders(root):
 
     def fix_value(value):
         if isinstance(value, str):
-            m = re.search('\\${(\\w.*?)\\}', value)
+            m = re.search("\\${(\\w.*?)\\}", value)
             if m is not None:
                 lookup = m.group(1)
                 new_value = get_value_by_path(root, lookup)
                 if isinstance(new_value, str):
-                    lookup_key = '${' + "{value}".format(value=lookup) + '}'
+                    lookup_key = "${" + "{value}".format(value=lookup) + "}"
                     new_value = value.replace(lookup_key, new_value)
                 return new_value
 

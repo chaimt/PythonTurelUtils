@@ -1,0 +1,228 @@
+version: "3"
+
+
+# vars:
+#   APP_NAME: '{{.APP_NAME | default "missing-app-name"}}'
+
+tasks:
+
+  install-uv:
+    cmds:
+      - brew install uv
+    silent: true
+    internal: true
+    status:
+      - brew ls --versions uv
+
+  clean:
+    desc: Clean all Python cache folders
+    cmds:
+      - find . -type d -name "__pycache__" -exec rm -r {} +
+      - find . -type d -name ".pytest_cache" -exec rm -r {} +
+      - find . -type d -name ".mypy_cache" -exec rm -r {} +
+      - find . -type d -name ".ruff_cache" -exec rm -r {} +
+      - find . -type f -name "*.pyc" -delete
+      - find . -type f -name "*.pyo" -delete
+      - find . -type f -name "*.pyd" -delete
+
+  update_uv:
+    desc: Update uv.lock and deploy to dev
+    cmds:
+      - |
+        echo "Updating uv.lock"
+        rm uv.lock
+        uv sync
+        git add uv.lock
+        git commit -m "update uv.lock"
+        git push
+        task ritual-utils:deploy-to-dev-k8s 
+
+
+  setup-env:
+    desc: Setup the environment
+    cmds:
+      - task: download-cursor-files
+      - task: install-uv
+      - uv python install 3.13
+      - uv venv --python 3.13 --clear
+      - zsh -c "source ./.venv/bin/activate && uv sync"
+      - zsh -c "source ./.venv/bin/activate && pre-commit install --hook-type pre-commit"
+      - zsh -c "source ./.venv/bin/activate && pre-commit autoupdate"
+
+
+  flatten-json-to-env:
+    silent: true
+    internal: true
+    vars:
+      JSON_PARAM: '{{.JSON_PARAM | default "missing-json-param"}}'
+      PARAM_NAME: '{{.PARAM_NAME | default "missing-param"}}'
+      ENV_FILE: '{{.ENV_FILE | default ".env"}}'
+    cmds:
+      - |
+        if [[ -z "{{.JSON_PARAM}}" ]]; then
+          echo "Failed to retrieve secret or parameter, it is empty."
+          exit 1
+        fi
+
+        FLATTEN_SECRET_JSON=$(echo "{{.JSON_PARAM}}"  | jq -r '
+                          . as $in
+                          | paths(scalars) as $p
+                          | select($p|length > 1)
+                          | ($p[1:] | map(tostring) | join("_"))
+                            + "="
+                            + ($in|getpath($p) | tostring)
+                        ')
+
+
+        KEYS=$(echo "{{.JSON_PARAM}}" | jq -r '
+          . as $in
+          | paths(scalars) as $p
+          | select($p | length > 1)
+          | ($p[1:] | map(tostring) | join("_"))
+        ')
+
+        echo "Writing {{.PARAM_NAME}} to {{.ENV_FILE}}..."
+
+        # Backup the original
+        cp "{{.ENV_FILE}}" "{{.ENV_FILE}}.bak" 2>/dev/null || true
+
+        # Create a temp file with filtered original .env
+        grep -v -E "^($(echo "$KEYS" | paste -sd'|' -)=)" "{{.ENV_FILE}}" 2>/dev/null > "{{.ENV_FILE}}.tmp" || true
+
+        # Add a marker comment
+        echo "# Auto-generated .env entries from GCP Secret/Parameter Manager - {{.PARAM_NAME}}" >> "{{.ENV_FILE}}.tmp"
+
+        # Append new key-value pairs
+        echo "$FLATTEN_SECRET_JSON"  >> "{{.ENV_FILE}}.tmp"
+
+        # Replace old .env with new content
+        mv "{{.ENV_FILE}}.tmp" "{{.ENV_FILE}}"
+
+
+  build-json-params-flattened-dev:
+    internal: true
+    vars:
+      PARAM_NAME: '{{.PARAM_NAME | default "missing-param"}}'
+      VERSION: '{{.VERSION | default "1"}}'
+      PROJECT: '{{.PROJECT | default "ritual-app-dev-104fc"}}'
+      ENV_FILE: '{{.ENV_FILE | default ".env"}}'
+    cmds:     
+      - echo "getting param {{.PROJECT}}/{{.PARAM_NAME}}/{{.VERSION}}"
+      - task: flatten-json-to-env
+        vars:
+          JSON_PARAM: $(gcloud parametermanager parameters versions describe projects/{{.PROJECT}}/locations/global/parameters/{{.PARAM_NAME}}/versions/{{.VERSION}} --parameter=projects/{{.PROJECT}}/locations/global/parameters/{{.PARAM_NAME}} --location=global --format='value(payload.data)' | base64 --decode)
+          PARAM_NAME: '{{.PARAM_NAME}}'
+        
+
+  build-json-secrets-flattened:
+    internal: true
+    vars:
+      SECRET_NAME: '{{.SECRET_NAME | default "some-secrets"}}'
+      VERSION: '{{.VERSION | default "latest"}}'
+      ENV_FILE: '{{.ENV_FILE | default ".env"}}'
+    cmds:
+      - echo "getting secret{{.PROJECT}}/{{.SECRET_NAME}}/{{.VERSION}}"
+      - task: flatten-json-to-env
+        vars:
+          JSON_PARAM: $(gcloud secrets versions access "{{.VERSION}}" --secret="{{.SECRET_NAME}}" --format='get(payload.data)' | tr '_-' '/+' | base64 -d)
+          PARAM_NAME: '{{.SECRET_NAME}}'
+
+
+
+  build-all-params:
+    desc: Build all JSON params from GCP Parameter Manager
+    cmds:
+      - task: build-json-params-flattened-dev
+        vars:
+          PARAM_NAME: common-params
+          VERSION: '{{.COMMON_PARAMS_VERSION | default "4"}}'
+      - task: build-json-params-flattened-dev
+        vars:
+          PARAM_NAME: '{{.APP_NAME}}'
+          VERSION: '{{.APP_NAME_VERSION | default "2"}}'
+
+
+
+  clean-cache:
+    desc: "Clean all Python cache files and directories"
+    cmds:
+      - |
+        find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+        find . -type f -name "*.pyc" -delete 2>/dev/null || true
+        find . -type f -name "*.pyo" -delete 2>/dev/null || true
+        find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+        find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+        find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
+        find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
+        rm -rf .coverage htmlcov/ 2>/dev/null || true
+        echo "Python cache cleaned successfully!"
+
+  download-cursor-files:
+    desc: Download .cursor files from hosting repository (local override)
+    vars:
+      REPO_URL: "{{.REPO_URL | default \"https://github.com/ritual-app/utils.git\"}}"
+      REPO_PATH: "{{.REPO_PATH | default \"\"}}"
+      TMP_DIR: "{{.TMP_DIR | default \".tmp_cursor_download\"}}"
+    cmds:
+      - |
+        REPO_URL_VAL="{{.REPO_URL}}"
+        REPO_PATH_VAL="{{.REPO_PATH}}"
+        if [ -z "$REPO_URL_VAL" ] && [ -z "$REPO_PATH_VAL" ]; then
+          echo "Error: Either REPO_URL or REPO_PATH must be set"
+          echo "Usage: task ritual-utils:download-cursor-files REPO_URL=<url> or REPO_PATH=<path>"
+          exit 1
+        fi
+      - |
+        REPO_URL_VAL="{{.REPO_URL}}"
+        REPO_PATH_VAL="{{.REPO_PATH}}"
+        TMP_DIR_VAL="{{.TMP_DIR}}"
+        if [ -n "$REPO_URL_VAL" ]; then
+          echo "Cloning repository from $REPO_URL_VAL..."
+          rm -rf "$TMP_DIR_VAL"
+          git clone --depth 1 "$REPO_URL_VAL" "$TMP_DIR_VAL" || exit 1
+          SOURCE_DIR="$TMP_DIR_VAL"
+        else
+          echo "Using local repository path: $REPO_PATH_VAL"
+          SOURCE_DIR="$REPO_PATH_VAL"
+        fi
+      - |
+        REPO_URL_VAL="{{.REPO_URL}}"
+        REPO_PATH_VAL="{{.REPO_PATH}}"
+        TMP_DIR_VAL="{{.TMP_DIR}}"
+        if [ -n "$REPO_URL_VAL" ]; then
+          SOURCE_DIR="$TMP_DIR_VAL"
+        else
+          SOURCE_DIR="$REPO_PATH_VAL"
+        fi
+        if [ ! -d "$SOURCE_DIR" ]; then
+          echo "Error: Source directory not found: $SOURCE_DIR"
+          exit 1
+        fi
+        echo "Copying .cursor files..."
+        # Copy .cursor directory if it exists
+        if [ -d "$SOURCE_DIR/.cursor" ]; then
+          echo "Found .cursor directory, copying..."
+          cp -r "$SOURCE_DIR/.cursor" .
+          echo "Copied: .cursor/"
+        fi
+        # Copy individual .cursor files
+        find "$SOURCE_DIR" -type f \( -name "*.cursor" -o -name ".cursor*" \) | while read file; do
+          if [ -f "$file" ]; then
+            rel_path=$(echo "$file" | sed "s|^$SOURCE_DIR/||")
+            target_dir=$(dirname "$rel_path")
+            if [ "$target_dir" != "." ]; then
+              mkdir -p "$target_dir"
+            fi
+            cp "$file" "$rel_path"
+            echo "Copied: $rel_path"
+          fi
+        done
+      - |
+        REPO_URL_VAL="{{.REPO_URL}}"
+        TMP_DIR_VAL="{{.TMP_DIR}}"
+        if [ -n "$REPO_URL_VAL" ]; then
+          echo "Cleaning up temporary directory..."
+          rm -rf "$TMP_DIR_VAL"
+        fi
+        echo "Done! .cursor files have been downloaded."
+  
