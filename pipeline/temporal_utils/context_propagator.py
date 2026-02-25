@@ -154,16 +154,16 @@ class ContextActivityInboundInterceptor(ActivityInboundInterceptor):
         Restore OurRitualContext from a dictionary.
 
         Args:
-            context_dict: Dictionary with keys like 'ourritual/topic/name', 'ourritual/key', etc.
+            context_dict: Dictionary with keys like 'topic/name', 'session/id', etc.
+                          Also accepts legacy 'ourritual/' prefixed keys.
         """
         ctx = OurRitualContext()
         for key, value in context_dict.items():
-            if key == "ourritual/topic/name":
+            normalized_key = key[len("ourritual/") :] if key.startswith("ourritual/") else key
+            if normalized_key == "topic/name":
                 ctx.set_topic_info(value)
-            elif key.startswith("ourritual/") and key != "ourritual/test":
-                # Strip 'ourritual/' prefix for custom info
-                custom_key = key[len("ourritual/") :]
-                ctx.set_custom_info(custom_key, value)
+            elif normalized_key != "test":
+                ctx.set_custom_info(normalized_key, value)
 
     async def execute_activity(self, input: ExecuteActivityInput) -> Any:
         """
@@ -292,16 +292,16 @@ class ContextWorkflowInboundInterceptor(WorkflowInboundInterceptor):
         Restore OurRitualContext from a dictionary.
 
         Args:
-            context_dict: Dictionary with keys like 'ourritual/topic/name', 'ourritual/key', etc.
+            context_dict: Dictionary with keys like 'topic/name', 'session/id', etc.
+                          Also accepts legacy 'ourritual/' prefixed keys.
         """
         ctx = OurRitualContext()
         for key, value in context_dict.items():
-            if key == "ourritual/topic/name":
+            normalized_key = key[len("ourritual/") :] if key.startswith("ourritual/") else key
+            if normalized_key == "topic/name":
                 ctx.set_topic_info(value)
-            elif key.startswith("ourritual/") and key != "ourritual/test":
-                # Strip 'ourritual/' prefix for custom info
-                custom_key = key[len("ourritual/") :]
-                ctx.set_custom_info(custom_key, value)
+            elif normalized_key != "test":
+                ctx.set_custom_info(normalized_key, value)
 
     async def execute_workflow(self, input: ExecuteWorkflowInput) -> Any:
         """

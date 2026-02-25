@@ -81,7 +81,7 @@ class HeartbeatManager:
                     # Send heartbeat
                     activity.heartbeat(heartbeat_details)
 
-                    logger.debug(f"💓 Heartbeat #{self._heartbeat_count} sent " f"(elapsed: {elapsed:.1f}s)")
+                    logger.debug(f"💓 Heartbeat #{self._heartbeat_count} sent (elapsed: {elapsed:.1f}s)")
 
                     # Call custom callback if provided
                     if self.on_heartbeat:
@@ -135,7 +135,7 @@ class HeartbeatManager:
             }
         )
 
-        logger.debug(f"💓 Stopped heartbeat manager " f"(sent {self._heartbeat_count} heartbeats over {elapsed:.1f}s)")
+        logger.debug(f"💓 Stopped heartbeat manager (sent {self._heartbeat_count} heartbeats over {elapsed:.1f}s)")
 
         return False  # Don't suppress exceptions
 
@@ -189,7 +189,7 @@ class HeartbeatManager:
 
                     activity.heartbeat(heartbeat_details)
 
-                    logger.debug(f"💓 Heartbeat #{heartbeat_count[0]} sent " f"(elapsed: {elapsed:.1f}s)")
+                    logger.debug(f"💓 Heartbeat #{heartbeat_count[0]} sent (elapsed: {elapsed:.1f}s)")
 
                     if on_heartbeat:
                         on_heartbeat(heartbeat_details)
@@ -225,7 +225,7 @@ class HeartbeatManager:
                 }
             )
 
-            logger.debug(f"💓 Stopped sync heartbeat manager " f"(sent {heartbeat_count[0]} heartbeats over {elapsed:.1f}s)")
+            logger.debug(f"💓 Stopped sync heartbeat manager (sent {heartbeat_count[0]} heartbeats over {elapsed:.1f}s)")
 
 
 @asynccontextmanager

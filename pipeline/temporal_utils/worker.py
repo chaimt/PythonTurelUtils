@@ -232,7 +232,7 @@ class TemporalWorker:
                 # workflow_task_executor
             )
 
-            logger.info(f"✅ Worker created with {len(self.workflows)} workflow(s) " f"and {len(self.activities)} activity(ies)")
+            logger.info(f"✅ Worker created with {len(self.workflows)} workflow(s) and {len(self.activities)} activity(ies)")
             logger.info(f"📋 Registered workflows: {[w.__name__ for w in self.workflows]}")
             logger.info(f"📋 Registered activities: {[a.__name__ for a in self.activities]}")
 
@@ -348,7 +348,7 @@ class TemporalWorker:
 
     async def run_worker_in_task(self, task_name: str):
         worker = await self.create_worker()
-        asyncio.create_task(worker.run(), name=task_name),
+        (asyncio.create_task(worker.run(), name=task_name),)
 
     @staticmethod
     def generate_id(domain: str, service: str, feature: str, action: str, version: str) -> str:
