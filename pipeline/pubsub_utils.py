@@ -1,9 +1,9 @@
 import logging
 
-from const import OURRITUAL_CONTEXT_HEADER
+from const import APP_CONTEXT_HEADER
 from global_config import GlobalConfig
 from google.cloud import pubsub_v1
-from log_helper import OurRitualContext
+from log_helper import AppContext
 from opentelemetry.propagate import inject
 from opentelemetry.trace import SpanKind
 from pipeline_utils import wrap_message_callback
@@ -45,7 +45,7 @@ def publish_message(publisher, topic_path, message_json, attributes=None):
         if attributes is None:
             attributes = {}
         inject(attributes)
-        attributes[OURRITUAL_CONTEXT_HEADER] = OurRitualContext().to_header()
+        attributes[APP_CONTEXT_HEADER] = AppContext().to_header()
         # Publish with trace context attributes
         future = publisher.publish(topic_path, message_json, **attributes)
         return future.result()

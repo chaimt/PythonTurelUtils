@@ -1,17 +1,17 @@
 """
 Context Propagation Interceptor for Temporal.
 
-This module provides interceptors that automatically propagate OurRitualContext
+This module provides interceptors that automatically propagate AppContext
 between workflows and activities using headers, similar to OpenTelemetry tracing.
 
 The interceptor:
-1. Captures the current OurRitualContext when an activity is called from a workflow
+1. Captures the current AppContext when an activity is called from a workflow
 2. Serializes it using to_header() and injects it into the activity headers
 3. Restores the context in the activity using from_header() before execution
 
 Context Propagation Between Activities:
 ---------------------------------------
-When activities modify OurRitualContext (e.g., via set_custom_info() or add_to_context()),
+When activities modify AppContext (e.g., via set_custom_info() or add_to_context()),
 those changes need to be explicitly returned to the workflow. This is because:
 1. Activities run in separate worker threads/processes with isolated contextvar contexts
 2. Workflows run in a sandboxed environment that cannot access external mutable state
@@ -48,7 +48,7 @@ import logging
 from dataclasses import dataclass, replace
 from typing import Any, Dict, Mapping, Optional, Type
 
-from log_helper import OurRitualContext
+from log_helper import AppContext
 from temporalio import activity, workflow
 from temporalio.api.common.v1 import Payload
 from temporalio.client import Interceptor as ClientInterceptor
@@ -72,8 +72,8 @@ from temporalio.worker import (
 
 logger = logging.getLogger(__name__)
 
-# Header key for OurRitualContext propagation
-CONTEXT_HEADER_KEY = "ourritual-context"
+# Header key for AppContext propagation
+CONTEXT_HEADER_KEY = "app_context-context"
 
 
 @dataclass
@@ -81,7 +81,7 @@ class ActivityResultWithContext:
     """
     Helper dataclass for activities that need to return context updates to workflows.
 
-    When an activity modifies OurRitualContext (e.g., via add_to_context()), wrap the
+    When an activity modifies AppContext (e.g., via add_to_context()), wrap the
     result with this class to propagate context changes back to the workflow.
 
     Usage in activity:
@@ -108,7 +108,7 @@ class ActivityResultWithContext:
 
 def capture_context_header() -> str:
     """
-    Capture the current OurRitualContext as a header string.
+    Capture the current AppContext as a header string.
 
     This utility function can be used by activities that modify context
     and need to return the updated context to the workflow.
@@ -116,12 +116,12 @@ def capture_context_header() -> str:
     Returns:
         Base64url-encoded context header string
     """
-    return OurRitualContext().to_header()
+    return AppContext().to_header()
 
 
 def restore_context_from_header(header_value: str) -> None:
     """
-    Restore OurRitualContext from a header string.
+    Restore AppContext from a header string.
 
     This utility function can be used by workflows to restore context
     from activity results.
@@ -130,16 +130,16 @@ def restore_context_from_header(header_value: str) -> None:
         header_value: Base64url-encoded context header string
     """
     if header_value:
-        OurRitualContext().from_header(header_value)
+        AppContext().from_header(header_value)
 
 
 class ContextActivityInboundInterceptor(ActivityInboundInterceptor):
     """
-    Inbound interceptor for activities that restores OurRitualContext from headers.
+    Inbound interceptor for activities that restores AppContext from headers.
 
     This interceptor:
     1. Extracts the context header from incoming activity calls
-    2. Restores the OurRitualContext before the activity executes
+    2. Restores the AppContext before the activity executes
 
     Note: Context updates made during activity execution are NOT automatically
     propagated back to the workflow. Activities that modify context should use
@@ -151,15 +151,15 @@ class ContextActivityInboundInterceptor(ActivityInboundInterceptor):
 
     def _restore_context_from_dict(self, context_dict: Dict[str, str]) -> None:
         """
-        Restore OurRitualContext from a dictionary.
+        Restore AppContext from a dictionary.
 
         Args:
             context_dict: Dictionary with keys like 'topic/name', 'session/id', etc.
-                          Also accepts legacy 'ourritual/' prefixed keys.
+                          Also accepts legacy 'app_context/' prefixed keys.
         """
-        ctx = OurRitualContext()
+        ctx = AppContext()
         for key, value in context_dict.items():
-            normalized_key = key[len("ourritual/") :] if key.startswith("ourritual/") else key
+            normalized_key = key[len("app_context/") :] if key.startswith("app_context/") else key
             if normalized_key == "topic/name":
                 ctx.set_topic_info(value)
             elif normalized_key != "test":
@@ -167,7 +167,7 @@ class ContextActivityInboundInterceptor(ActivityInboundInterceptor):
 
     async def execute_activity(self, input: ExecuteActivityInput) -> Any:
         """
-        Execute the activity after restoring OurRitualContext from headers.
+        Execute the activity after restoring AppContext from headers.
 
         Args:
             input: The activity execution input containing headers
@@ -188,9 +188,9 @@ class ContextActivityInboundInterceptor(ActivityInboundInterceptor):
                         context_dict = self.payload_converter.from_payloads([header_payload])[0]
                         if context_dict and isinstance(context_dict, dict):
                             self._restore_context_from_dict(context_dict)
-                            logger.debug(f"Restored OurRitualContext in activity {activity_info.activity_type}")
+                            logger.debug(f"Restored AppContext in activity {activity_info.activity_type}")
                     except Exception as e:
-                        logger.warning(f"Failed to restore OurRitualContext from header: {e}")
+                        logger.warning(f"Failed to restore AppContext from header: {e}")
 
         except Exception as e:
             logger.debug(f"Could not extract context header: {e}")
@@ -201,9 +201,9 @@ class ContextActivityInboundInterceptor(ActivityInboundInterceptor):
 
 class ContextWorkflowOutboundInterceptor(WorkflowOutboundInterceptor):
     """
-    Outbound interceptor for workflows that injects OurRitualContext into headers.
+    Outbound interceptor for workflows that injects AppContext into headers.
 
-    This interceptor captures the current OurRitualContext and injects it into headers
+    This interceptor captures the current AppContext and injects it into headers
     when starting activities or child workflows.
 
     Note: To propagate context updates from activities back to workflows, activities
@@ -216,20 +216,20 @@ class ContextWorkflowOutboundInterceptor(WorkflowOutboundInterceptor):
 
     def _get_context_headers(self) -> Mapping[str, Payload]:
         """
-        Get the current OurRitualContext as headers.
+        Get the current AppContext as headers.
 
         Returns:
             Dictionary with context header key and Payload value
         """
         try:
-            context = OurRitualContext()
+            context = AppContext()
             # Use to_list() to get a dict - matches OpenTelemetry pattern
             context_dict = context.to_list()
             if context_dict:
                 # Use PayloadConverter like OpenTelemetry interceptor does
                 return {CONTEXT_HEADER_KEY: self.payload_converter.to_payloads([context_dict])[0]}
         except Exception as e:
-            logger.debug(f"Could not serialize OurRitualContext: {e}")
+            logger.debug(f"Could not serialize AppContext: {e}")
         return {}
 
     def _merge_headers(self, existing_headers: Optional[Mapping[str, Payload]]) -> Mapping[str, Payload]:
@@ -255,7 +255,7 @@ class ContextWorkflowOutboundInterceptor(WorkflowOutboundInterceptor):
 
     def start_activity(self, input: StartActivityInput) -> workflow.ActivityHandle[Any]:
         """
-        Start an activity with OurRitualContext injected into headers.
+        Start an activity with AppContext injected into headers.
         """
         # Create new input with merged headers using dataclass replace for forward compatibility
         new_input = replace(input, headers=self._merge_headers(input.headers))
@@ -263,7 +263,7 @@ class ContextWorkflowOutboundInterceptor(WorkflowOutboundInterceptor):
 
     def start_local_activity(self, input: StartLocalActivityInput) -> workflow.ActivityHandle[Any]:
         """
-        Start a local activity with OurRitualContext injected into headers.
+        Start a local activity with AppContext injected into headers.
         """
         # Create new input with merged headers using dataclass replace for forward compatibility
         new_input = replace(input, headers=self._merge_headers(input.headers))
@@ -271,7 +271,7 @@ class ContextWorkflowOutboundInterceptor(WorkflowOutboundInterceptor):
 
     def start_child_workflow(self, input: StartChildWorkflowInput) -> workflow.ChildWorkflowHandle[Any, Any]:
         """
-        Start a child workflow with OurRitualContext injected into headers.
+        Start a child workflow with AppContext injected into headers.
         """
         # Create new input with merged headers using dataclass replace for forward compatibility
         new_input = replace(input, headers=self._merge_headers(input.headers))
@@ -280,7 +280,7 @@ class ContextWorkflowOutboundInterceptor(WorkflowOutboundInterceptor):
 
 class ContextWorkflowInboundInterceptor(WorkflowInboundInterceptor):
     """
-    Inbound interceptor for workflows that restores OurRitualContext and
+    Inbound interceptor for workflows that restores AppContext and
     sets up outbound context propagation.
     """
 
@@ -289,15 +289,15 @@ class ContextWorkflowInboundInterceptor(WorkflowInboundInterceptor):
 
     def _restore_context_from_dict(self, context_dict: Dict[str, str]) -> None:
         """
-        Restore OurRitualContext from a dictionary.
+        Restore AppContext from a dictionary.
 
         Args:
             context_dict: Dictionary with keys like 'topic/name', 'session/id', etc.
-                          Also accepts legacy 'ourritual/' prefixed keys.
+                          Also accepts legacy 'app_context/' prefixed keys.
         """
-        ctx = OurRitualContext()
+        ctx = AppContext()
         for key, value in context_dict.items():
-            normalized_key = key[len("ourritual/") :] if key.startswith("ourritual/") else key
+            normalized_key = key[len("app_context/") :] if key.startswith("app_context/") else key
             if normalized_key == "topic/name":
                 ctx.set_topic_info(value)
             elif normalized_key != "test":
@@ -305,7 +305,7 @@ class ContextWorkflowInboundInterceptor(WorkflowInboundInterceptor):
 
     async def execute_workflow(self, input: ExecuteWorkflowInput) -> Any:
         """
-        Execute the workflow after restoring OurRitualContext from headers.
+        Execute the workflow after restoring AppContext from headers.
         """
         try:
             workflow_info = workflow.info()
@@ -319,9 +319,9 @@ class ContextWorkflowInboundInterceptor(WorkflowInboundInterceptor):
                         context_dict = self.payload_converter.from_payloads([header_payload])[0]
                         if context_dict and isinstance(context_dict, dict):
                             self._restore_context_from_dict(context_dict)
-                            logger.debug(f"Restored OurRitualContext in workflow {workflow_info.workflow_type}")
+                            logger.debug(f"Restored AppContext in workflow {workflow_info.workflow_type}")
                     except Exception as e:
-                        logger.warning(f"Failed to restore OurRitualContext from header: {e}")
+                        logger.warning(f"Failed to restore AppContext from header: {e}")
         except Exception as e:
             logger.debug(f"Could not extract context header from workflow: {e}")
 
@@ -340,9 +340,9 @@ class ContextWorkflowInboundInterceptor(WorkflowInboundInterceptor):
 
 class ContextClientOutboundInterceptor(ClientOutboundInterceptor):
     """
-    Client outbound interceptor that injects OurRitualContext into workflow headers.
+    Client outbound interceptor that injects AppContext into workflow headers.
 
-    This interceptor captures the current OurRitualContext when workflows are started
+    This interceptor captures the current AppContext when workflows are started
     from the client and injects it into the headers.
     """
 
@@ -351,13 +351,13 @@ class ContextClientOutboundInterceptor(ClientOutboundInterceptor):
 
     def _get_context_headers(self) -> Mapping[str, Payload]:
         """
-        Get the current OurRitualContext as headers.
+        Get the current AppContext as headers.
 
         Returns:
             Dictionary with context header key and Payload value
         """
         try:
-            context = OurRitualContext()
+            context = AppContext()
             # Use to_list() to get a dict - this matches the OpenTelemetry pattern
             # of storing a carrier dict instead of an encoded string
             context_dict = context.to_list()
@@ -366,7 +366,7 @@ class ContextClientOutboundInterceptor(ClientOutboundInterceptor):
                 # This properly encodes the dict as JSON with correct metadata
                 return {CONTEXT_HEADER_KEY: self.payload_converter.to_payloads([context_dict])[0]}
         except Exception as e:
-            logger.debug(f"Could not serialize OurRitualContext: {e}")
+            logger.debug(f"Could not serialize AppContext: {e}")
         return {}
 
     def _merge_headers(self, existing_headers: Optional[Mapping[str, Payload]]) -> Mapping[str, Payload]:
@@ -392,7 +392,7 @@ class ContextClientOutboundInterceptor(ClientOutboundInterceptor):
 
     async def start_workflow(self, input: StartWorkflowInput) -> Any:
         """
-        Start a workflow with OurRitualContext injected into headers.
+        Start a workflow with AppContext injected into headers.
         """
         merged_headers = self._merge_headers(input.headers)
         new_input = replace(input, headers=merged_headers)
@@ -401,10 +401,10 @@ class ContextClientOutboundInterceptor(ClientOutboundInterceptor):
 
 class ContextPropagatorInterceptor(ClientInterceptor, WorkerInterceptor):
     """
-    Main interceptor class for OurRitualContext propagation.
+    Main interceptor class for AppContext propagation.
 
     This interceptor provides both workflow and activity interceptors that work
-    together to propagate OurRitualContext across Temporal workflow boundaries.
+    together to propagate AppContext across Temporal workflow boundaries.
 
     It implements both client and worker interceptor interfaces so it can be passed
     to Client.connect() and will automatically be used for workers as well.
@@ -427,7 +427,7 @@ class ContextPropagatorInterceptor(ClientInterceptor, WorkerInterceptor):
         """
         Return the client outbound interceptor for context propagation.
 
-        This wraps the outbound interceptor to inject OurRitualContext
+        This wraps the outbound interceptor to inject AppContext
         when workflows are started from the client.
         """
         return ContextClientOutboundInterceptor(next)

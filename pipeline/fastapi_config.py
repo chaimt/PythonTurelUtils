@@ -166,7 +166,7 @@ def create_app(
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r"https://.*\.(ourritual|heyritual|ritual-app)\.(com|co)",
+        allow_origin_regex=r"https://.*\.(app)\.(com|co)",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -174,8 +174,8 @@ def create_app(
 
     # Allowed hosts for swagger/docs access (IAP-protected domain only)
     SWAGGER_ALLOWED_HOSTS = [
-        "swagger.dev.ourritual.com",
-        "swagger.ourritual.com",
+        "swagger.dev.app.com",
+        "swagger.app.com",
         "localhost",
         "127.0.0.1",
     ]
@@ -185,8 +185,8 @@ def create_app(
         """
         Block access to /swagger, /docs, /redoc, /openapi.json on non-swagger domains.
 
-        This ensures that API documentation is ONLY accessible via swagger.dev.ourritual.com
-        which is protected by GCP IAP, not via public endpoints like webhooks.dev.ourritual.com.
+        This ensures that API documentation is ONLY accessible via swagger.dev.app.com
+        which is protected by GCP IAP, not via public endpoints like webhooks.dev.app.com.
 
         Security: Defense-in-depth approach with app-level host validation + GCP IAP.
         """
@@ -208,7 +208,7 @@ def create_app(
                 logger.warning(f"🚫 Blocked swagger access from unauthorized host: {host} " f"(path: {path})")
                 return JSONResponse(
                     status_code=403,
-                    content={"detail": "Swagger/API documentation access is restricted. " "Please use swagger.dev.ourritual.com"},
+                    content={"detail": "Swagger/API documentation access is restricted. " "Please use swagger.dev.app.com"},
                 )
 
         # Continue to the actual endpoint

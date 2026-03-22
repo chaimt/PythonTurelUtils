@@ -1,2 +1,2 @@
-OURRITUAL_CONTEXT_HEADER = "X-Ourritual-Context"
+APP_CONTEXT_HEADER = "X-App-Context"
 TRACEPARENT_HEADER = "traceparent"

@@ -10,7 +10,7 @@ except ImportError:
 
 
 @singleton
-class OurRitualContext:
+class AppContext:
     """
     A wrapper class for Python's logging.Logger that automatically appends
     member_id, expert_id, and session_zoom_info as extra data to all log messages.
@@ -81,17 +81,17 @@ class OurRitualContext:
         """Convert the context to a dictionary of key-value pairs.
 
         Returns:
-            Dictionary with keys in format 'ourritual/section/key' and string values.
+            Dictionary with keys in format 'app_context/section/key' and string values.
             Returns empty dict if no context is set.
         """
         result = {}
         if self.topic_info is not None:
-            result["ourritual/topic/name"] = self.topic_info
+            result["topic/name"] = self.topic_info
 
         if self.custom_info is not None:
             for key, value in self.custom_info.items():
                 if value is not None:
-                    result[f"ourritual/{key}"] = str(value)
+                    result[f"{key}"] = str(value)
 
         return result
 
@@ -113,6 +113,25 @@ class OurRitualContext:
         json_str = "\n".join(json_list)
         encoded = base64.urlsafe_b64encode(json_str.encode("utf-8")).decode("ascii")
         return encoded
+
+    def from_dict(self, data: Dict[str, Any]) -> Self:
+        """Add key-value pairs from a dictionary to the context.
+
+        Args:
+            data: Dictionary of key-value pairs. Key "topic/name" sets topic_info;
+                  all other keys are added to custom_info.
+
+        Returns:
+            Self for method chaining
+        """
+        if not data:
+            return self
+        for key, value in data.items():
+            if key == "topic/name":
+                self.set_topic_info(str(value) if value is not None else None)
+            else:
+                self.set_custom_info(key, value)
+        return self
 
     def from_header(self, header: str) -> Self:
         """Reconstruct the context from a base64url-encoded header string produced by to_header().
@@ -137,43 +156,31 @@ class OurRitualContext:
             # If decoding fails, return self unchanged
             return self
 
-        # Data structures to collect parsed values
+        # Header is the full snapshot: clear existing context before applying
+        self._topic_info_var.set(None)
+        self._custom_info_var.set(None)
+
+        # Same line format as to_header() / to_list(): key: "value"
+        line_pattern = re.compile(r'^(.+):\s*"([^"]*)"\s*$')
+
         topic_data: Optional[str] = None
         custom_data: Dict[str, Any] = {}
-
-        # Pattern to match: ourritual/section/key: "value" or ourritual/key: "value" (for custom_info)
-        pattern_with_section = r'ourritual/([^/]+)/(.+?):\s*"([^"]*)"'
-        pattern_direct = r'ourritual/([^:]+):\s*"([^"]*)"'
 
         for line in decoded_str.split("\n"):
             line = line.strip()
             if not line:
                 continue
 
-            # Try pattern with section first (e.g., ourritual/topic/name)
-            match = re.match(pattern_with_section, line)
-            if match:
-                section = match.group(1)
-                key_path = match.group(2)
-                value = match.group(3)
-
-                if section == "topic":
-                    # Topic data: store the topic name
-                    if key_path == "name":
-                        topic_data = value
+            match = line_pattern.match(line)
+            if not match:
                 continue
 
-            # Try pattern without section (e.g., ourritual/key for custom_info)
-            match = re.match(pattern_direct, line)
-            if match:
-                key = match.group(1)
-                value = match.group(2)
+            key, value = match.group(1), match.group(2)
+            if key == "topic/name":
+                topic_data = value
+            else:
+                custom_data[key] = value
 
-                # Skip topic as it's already handled above
-                if key != "topic":
-                    custom_data[key] = value
-
-        # Convert parsed data to objects and set them
         if topic_data is not None:
             self.set_topic_info(topic_data)
 

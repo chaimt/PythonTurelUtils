@@ -7,7 +7,7 @@ from logging.handlers import RotatingFileHandler
 
 from dotenv import load_dotenv
 from global_config import GlobalConfig
-from log_helper import OurRitualContext
+from log_helper import AppContext
 from opentelemetry import trace
 from opentelemetry.trace import format_trace_id
 
@@ -54,14 +54,14 @@ class JsonFormatter(logging.Formatter):
         if hasattr(record, "trace_id") and record.trace_id:
             log_message["trace_id"] = record.trace_id
 
-        # Add OurRitualContext as JSON under "ourritual"
+        # Add app_context as JSON under "app_context"
         try:
-            ourritual_dict = OurRitualContext().to_list()
-            if ourritual_dict:
-                log_message["ourritual"] = ourritual_dict
+            app_context_dict = AppContext().to_list()
+            if app_context_dict:
+                log_message["app_context"] = app_context_dict
         except Exception as e:
-            logger.warning(f"Error adding OurRitualContext to record: {e}")
-            ourritual_dict = {}
+            logger.warning(f"Error adding AppContext to record: {e}")
+            app_context_dict = {}
 
         return json.dumps(log_message)
 

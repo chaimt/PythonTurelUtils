@@ -16,7 +16,7 @@ from google.auth import default
 from google.cloud import logging as gcp_logging
 from google.cloud import monitoring_v3, trace_v2
 from google.cloud.logging_v2.handlers import CloudLoggingHandler
-from log_helper import OurRitualContext
+from log_helper import AppContext
 from opentelemetry import metrics, trace
 
 try:
@@ -95,11 +95,11 @@ class OTELCloudLoggingHandler(CloudLoggingHandler):
                 record._trace = f"projects/{self.project_id}/traces/{trace_id}"
 
             try:
-                ourritual_dict = OurRitualContext().to_list()
-                if ourritual_dict:
-                    record.extra["ourritual"] = ourritual_dict
+                app_context_dict = AppContext().to_list()
+                if app_context_dict:
+                    record.extra["app_context"] = app_context_dict
             except Exception as e:
-                logger.warning(f"Error adding OurRitualContext to record: {e}")
+                logger.warning(f"Error adding AppContext to record: {e}")
 
         # Ensure severity is set on the record for GCP Cloud Logging
         # Map Python log level to GCP severity
@@ -166,14 +166,14 @@ class OTELJSONFormatter(logging.Formatter):
         if "instance_id" in os.environ:
             log_entry["service_instance_id"] = os.environ["instance_id"]
 
-        # Add OurRitualContext as JSON under "ourritual"
+        # Add AppContext as JSON under "app_context"
         try:
-            ourritual_dict = OurRitualContext().to_list()
-            if ourritual_dict:
-                log_entry["ourritual"] = ourritual_dict
+            app_context_dict = AppContext().to_list()
+            if app_context_dict:
+                log_entry["app_context"] = app_context_dict
         except Exception as e:
-            logger.warning(f"Error adding OurRitualContext to record: {e}")
-            ourritual_dict = {}
+            logger.warning(f"Error adding AppContext to record: {e}")
+            app_context_dict = {}
 
         return json.dumps(log_entry)
 

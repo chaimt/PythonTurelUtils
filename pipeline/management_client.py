@@ -6,12 +6,12 @@ from typing import Optional
 
 import httpx
 import requests
-from const import OURRITUAL_CONTEXT_HEADER, TRACEPARENT_HEADER
+from const import APP_CONTEXT_HEADER, TRACEPARENT_HEADER
 from error_handling import handle_http_authentication_error
 from gcp_files import generate_path
 from global_config import GlobalConfig, get_safe_trace_id
 from pipeline_utils import (
-    OurRitualContext,
+    AppContext,
     SessionInformation,
     get_authentication_token,
 )
@@ -72,7 +72,7 @@ class ManagementClient:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {GlobalConfig().authentication_token}",
             "x-ritual-source": "session_events_consumer",
-            OURRITUAL_CONTEXT_HEADER: OurRitualContext().to_header(),
+            APP_CONTEXT_HEADER: AppContext().to_header(),
             TRACEPARENT_HEADER: get_safe_trace_id(),
         }
 

@@ -7,10 +7,10 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
 import httpx
-from const import OURRITUAL_CONTEXT_HEADER
+from const import APP_CONTEXT_HEADER
 from gcp_files import download_string, upload_string
 from global_config import GlobalConfig
-from log_helper import OurRitualContext
+from log_helper import AppContext
 from opentelemetry import trace
 from opentelemetry.propagate import extract, inject
 from opentelemetry.trace import SpanKind
@@ -212,13 +212,13 @@ class SessionInformation(BaseModel):
             return None
 
     def add_to_context(self):
-        OurRitualContext().set_custom_info("ourritual/session/id", self.session_id)
-        OurRitualContext().set_custom_info("ourritual/session/expert/id", self.expert.id)
-        OurRitualContext().set_custom_info("ourritual/session/expert/email", self.expert.email)
-        OurRitualContext().set_custom_info("ourritual/session/zoom_meeting_id", self.zoom_meeting_id)
+        AppContext().set_custom_info("app_context/session/id", self.session_id)
+        AppContext().set_custom_info("app_context/session/expert/id", self.expert.id)
+        AppContext().set_custom_info("app_context/session/expert/email", self.expert.email)
+        AppContext().set_custom_info("app_context/session/zoom_meeting_id", self.zoom_meeting_id)
         for pos, member in enumerate(self.member_information or []):
-            OurRitualContext().set_custom_info(f"ourritual/members/{pos}/id", member.id)
-            OurRitualContext().set_custom_info(f"ourritual/members/{pos}/email", member.email)
+            AppContext().set_custom_info(f"app_context/members/{pos}/id", member.id)
+            AppContext().set_custom_info(f"app_context/members/{pos}/email", member.email)
 
 
 def extract_trace_context_from_message(message):
@@ -334,9 +334,9 @@ def wrap_message_callback(callback_func):
         logger.debug(f"🔍 Extracting trace context from message: {message.attributes}")
         # Extract trace context from message and set as current
         context = extract(message.attributes)
-        ritual_context = message.attributes.get(OURRITUAL_CONTEXT_HEADER, "")
+        ritual_context = message.attributes.get(APP_CONTEXT_HEADER, "")
         if ritual_context:
-            OurRitualContext().from_header(ritual_context)
+            AppContext().from_header(ritual_context)
         if GlobalConfig().tracer:
             with GlobalConfig().tracer.start_as_current_span(
                 f"{GlobalConfig().settings.service_name} - callback",
